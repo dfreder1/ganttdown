@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ganttdown</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: monospace;
+      background: #1a1a1a;
+      color: #d4d4d4;
+      padding: 2rem;
+      min-height: 100vh;
+    }
+
+    h1 {
+      font-size: 1.25rem;
+      font-weight: normal;
+      color: #e8e8e8;
+      margin-bottom: 0.25rem;
+    }
+
+    .subtitle {
+      color: #888;
+      font-size: 0.85rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      max-width: 1400px;
+    }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    label {
+      display: block;
+      font-size: 0.8rem;
+      color: #888;
+      margin-bottom: 0.4rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    textarea {
+      width: 100%;
+      height: 300px;
+      background: #111;
+      color: #d4d4d4;
+      border: 1px solid #333;
+      padding: 0.75rem;
+      font-family: monospace;
+      font-size: 0.9rem;
+      resize: vertical;
+      outline: none;
+    }
+
+    textarea:focus { border-color: #555; }
+
+    .btn-row {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    button {
+      font-family: monospace;
+      font-size: 0.9rem;
+      padding: 0.45rem 1.1rem;
+      border: 1px solid #555;
+      background: #222;
+      color: #d4d4d4;
+      cursor: pointer;
+    }
+
+    button:hover { background: #2e2e2e; border-color: #888; }
+    button.primary { border-color: #6a9fb5; color: #6a9fb5; }
+    button.primary:hover { background: #1a2e38; }
+    button.teams { border-color: #7b7fc4; color: #7b7fc4; }
+    button.teams:hover { background: #1e1e38; }
+    button:disabled { opacity: 0.4; cursor: default; }
+
+    .output-box {
+      background: #111;
+      border: 1px solid #333;
+      padding: 0.75rem;
+      min-height: 300px;
+      overflow-x: auto;
+      white-space: pre;
+      font-size: 0.85rem;
+      line-height: 1.4;
+      color: #b8d7b8;
+    }
+
+    .error-box {
+      background: #1a0a0a;
+      border: 1px solid #552222;
+      padding: 0.75rem;
+      min-height: 300px;
+      color: #e87070;
+      font-size: 0.85rem;
+      white-space: pre-wrap;
+    }
+
+    .copy-notice {
+      font-size: 0.8rem;
+      color: #6a9fb5;
+      margin-top: 0.5rem;
+      min-height: 1.2em;
+    }
+
+    .help-toggle {
+      margin-top: 1.5rem;
+      max-width: 1400px;
+    }
+
+    details summary {
+      cursor: pointer;
+      font-size: 0.8rem;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      user-select: none;
+    }
+
+    details summary:hover { color: #aaa; }
+
+    .help-content {
+      margin-top: 0.75rem;
+      background: #111;
+      border: 1px solid #333;
+      padding: 0.75rem;
+      white-space: pre;
+      font-size: 0.82rem;
+      color: #999;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+
+<h1>ganttdown</h1>
+<p class="subtitle">Text-based Gantt chart · paste your .gd schedule below and click Generate</p>
+
+<form method="post" action="/">
+  <div class="layout">
+    <div>
+      <label for="tsm">Schedule Input</label>
+      <textarea id="tsm" name="tsm" spellcheck="false"
+        placeholder="@task: 1    name: Project Kickoff  start: 04/13/2026  dur: 1
+@task: 1.1  name: Requirements     start: 04/13/2026  dur: 5
+@task: 1.2  name: Design           dur: 5             dep: 1.1
+@task: 2.1  name: Development      dur: 10            dep: 1.2
+@task: 2.2  name: Testing          dur: 5             dep: 2.1
+@task: 2.3  name: Deploy           dur: 2             dep: 2.2">{{ tsm_input }}</textarea>
+      <div class="btn-row">
+        <button type="submit" class="primary">Generate</button>
+        <button type="button" onclick="clearAll()">Clear</button>
+      </div>
+    </div>
+
+    <div>
+      <label>Gantt Chart</label>
+      {% if error %}
+        <div class="error-box">{{ error }}</div>
+      {% else %}
+        <div class="output-box" id="output">{{ chart if chart else '(output will appear here)' }}</div>
+        {% if chart %}
+          <div class="btn-row">
+            <button type="button" class="teams" onclick="copyForTeams()">Copy for Teams</button>
+            <button type="submit" formaction="/download">Download schedule.txt</button>
+          </div>
+          <div class="copy-notice" id="copy-notice"></div>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+</form>
+
+<div class="help-toggle">
+  <details>
+    <summary>Format Reference</summary>
+    <div class="help-content">Each task is one line. All fields use  keyword: value  format.
+
+  @task: &lt;num&gt;  name: &lt;name&gt;  start: &lt;MM/DD/YYYY&gt;  dur: &lt;days&gt;  dep: &lt;dep1,dep2&gt;
+
+  @task:   line marker and task number — use dotted hierarchy e.g. 1  1.1  2.3
+  name:    task name (required)
+  start:   start date MM/DD/YYYY (required unless dep: is given)
+  dur:     duration in working days Mon–Fri (required)
+  dep:     comma-separated dependencies (optional)
+
+Rules
+  · Keywords can appear in any order after the task number.
+  · Weekends are skipped — duration and chart both count Mon–Fri only.
+  · A dependent task starts the next working day after ALL its deps finish.
+  · When both start: and dep: are given, dep: takes priority.
+  · Tasks sharing the same top-level number (e.g. 1.x) are grouped together.
+  · Blank lines and lines starting with // or -- are ignored.
+
+Example
+  @task: 1    name: Project Kickoff  start: 04/13/2026  dur: 1
+  @task: 1.1  name: Requirements     start: 04/13/2026  dur: 5
+  @task: 1.2  name: Design           dur: 5             dep: 1.1
+  @task: 2.1  name: Development      dur: 10            dep: 1.2
+  @task: 2.2  name: Testing          dur: 5             dep: 2.1</div>
+  </details>
+</div>
+
+<script>
+  function clearAll() {
+    document.getElementById('tsm').value = '';
+    const out = document.getElementById('output');
+    if (out) out.textContent = '(output will appear here)';
+  }
+
+  function copyForTeams() {
+    const chart = document.getElementById('output').textContent;
+    const wrapped = '```\n' + chart.trim() + '\n```';
+    navigator.clipboard.writeText(wrapped).then(() => {
+      const notice = document.getElementById('copy-notice');
+      notice.textContent = 'Copied — paste into a Teams message.';
+      setTimeout(() => notice.textContent = '', 3000);
+    });
+  }
+</script>
+
+</body>
+</html>

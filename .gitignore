@@ -1,0 +1,11 @@
+schedule.txt
+oldone.txt
+a.gd
+doug.gd
+.claude/
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.env
+*.wsgi
