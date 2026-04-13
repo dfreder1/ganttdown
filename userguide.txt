@@ -1,98 +1,101 @@
-txtsched / ganttdown — User Guide
+ganttdown — User Guide
 ═══════════════════════════════════════════════════════════════════════════════
 
 OVERVIEW
 ────────
-This project provides two ways to produce a text-based Gantt chart using the
-TSM (Text Schedule Markup) format.
+ganttdown reads a text file containing a <task> block and produces a
+text-based Gantt chart. Tasks are written as plain positional lines —
+no keywords required.
 
-  txtsched.py   Interactive mode — enter tasks one at a time at a prompt.
-  ganttdown.py  File mode — write all tasks in a text file, then run once.
+Output is printed to the terminal and saved to schedule.txt, wrapped in
+triple backticks for pasting directly into Microsoft Teams or other
+markdown-aware tools.
 
-Both tools produce the same chart format and save output to schedule.txt.
+The web version is available at:  https://ganttdown.dougfredericks.net
 
-TSM SYNTAX
+
+THE <TASK> BLOCK
 ────────────────────────────────────────────────────────────────────────────
-Each task is written on a single line using keyword: value pairs:
+Wrap your schedule in <task> and </task> tags:
 
-  @task: <num>  name: <name>  start: <MM/DD/YYYY>  dur: <days>  dep: <dep1,dep2,...>
+  <task>
+  1.0  Project Kickoff  2026-04-13  1
+  1.1  Requirements     2026-04-13  5
+  1.2  Design           1.1         5
+  </task>
 
-  @task: <num>  Task identifier using dotted hierarchy.  Examples: 1  1.1  2.3
-  name:        Task name (required).
-  start:       Start date in MM/DD/YYYY format (required unless dep: is given).
-  dur:         Duration in working days Mon–Fri (required).
-  dep:         Comma-separated list of task numbers this task depends on (optional).
+  • Only one <task> block per file.
+  • Everything outside the block is ignored — narrative text, headings,
+    notes, etc.
+  • Blank lines inside the block are ignored.
+  • Lines beginning with // are comments and are ignored.
+
+The <task> block can be embedded inside a markdown document:
+
+  ## Project Schedule
+
+  Some narrative text about the project.
+
+  <task>
+  1.1  Requirements  2026-04-13  5
+  1.2  Design        1.1         5
+  </task>
+
+  More notes here.
+
+
+POSITIONAL SYNTAX
+────────────────────────────────────────────────────────────────────────────
+Each task is one line with four positional fields in this fixed order:
+
+  <task#>  <name>  <YYYY-MM-DD or dep#>  <duration>
+
+  Field 1   Task number — dotted hierarchy e.g. 1  1.1  2.3  (required)
+  Field 2   Task name — everything between field 1 and field 3  (required)
+  Field 3   Start date (YYYY-MM-DD) OR dependency task number  (required)
+  Field 4   Duration in working days Mon–Fri  (required)
 
 Rules
-  • Keywords can appear in any order after the task number.
-  • Weekends are skipped — duration and the chart grid both count working days
-    only (Monday through Friday).
-  • A task with dependencies starts the next working day after ALL of its
-    dependencies finish.
-  • When both start: and dep: are provided, dep: takes priority and start: is ignored.
-  • Task numbers that share the same top-level prefix (e.g. all 1.x tasks)
-    are grouped together in the chart with a blank line between groups.
+  • Fields 1, 3, and 4 are detected by their shape:
+      Task number  →  digits and dots         e.g.  1.2
+      Date         →  YYYY-MM-DD              e.g.  2026-04-13
+      Duration     →  plain integer           e.g.  5
+  • Field 2 (name) is everything left between field 1 and field 3.
+  • Dates must be ISO 8601 format (YYYY-MM-DD). Other formats are rejected.
+  • Dates must fall on a working day (Mon–Fri).
+  • Weekends are skipped in both duration and chart display.
+  • A task with a dependency starts the next working day after that
+    dependency finishes.
+  • Dependencies must be defined before the tasks that reference them.
+  • Tasks sharing the same top-level number (e.g. 1.x) are grouped together
+    in the chart with a blank line between groups.
 
 Examples
-  @task: 1    name: Project Kickoff  start: 04/13/2026  dur: 1
-  @task: 1.1  name: Requirements     start: 04/13/2026  dur: 5
-  @task: 1.2  name: Design           dur: 5             dep: 1.1
-  @task: 2.1  name: Development      dur: 10            dep: 1.2
-  @task: 2.2  name: Testing          dur: 5             dep: 2.1
-  @task: 2.3  name: Deploy           dur: 2             dep: 2.2
+  1.0  Project Kickoff  2026-04-13  1
+  1.1  Requirements     2026-04-13  5
+  1.2  Design           1.1         5
+  2.1  Development      1.2         10
+  2.2  Testing          2.1         5
+  2.3  Deploy           2.2         2
 
 
-GANTTDOWN — FILE MODE
+RUNNING (COMMAND LINE)
 ────────────────────────────────────────────────────────────────────────────
-Write your schedule in a plain text file, then run ganttdown.py against it.
-
-Creating a schedule file
-  • One task per line in TSM format.
-  • Blank lines are ignored.
-  • Lines beginning with // or -- are treated as comments.
-  • Tasks that depend on other tasks must appear after those tasks in the file.
-
-Running
   python3 ganttdown.py <your-file>
 
   Example:
     python3 ganttdown.py myproject.gd
 
-Output
-  The Gantt chart is printed to the terminal and saved to schedule.txt in the
-  current directory.
-
-Error handling
-  All errors are reported with their line number before anything is saved.
-  Fix the reported lines and re-run.
-
-Sample file (myproject.gd)
-──────────────────────────
-  // My project schedule
-
-  @task: 1.0  name: Project Kickoff  start: 04/13/2026  dur: 1
-  @task: 1.1  name: Requirements     start: 04/13/2026  dur: 5
-  @task: 1.2  name: Design           dur: 5             dep: 1.1
-
-  @task: 2.1  name: Development      dur: 10            dep: 1.2
-  @task: 2.2  name: Testing          dur: 5             dep: 2.1
-  @task: 2.3  name: Deploy           dur: 2             dep: 2.2
+  Output is printed to the terminal and saved to schedule.txt.
 
 
-TXTSCHED — INTERACTIVE MODE
+RUNNING (WEB APP)
 ────────────────────────────────────────────────────────────────────────────
-Run without arguments and enter tasks one at a time at the prompt.
+  Visit https://ganttdown.dougfredericks.net
 
-  python3 txtsched.py
-
-Commands at the prompt
-  <TSM line>   Add a task (must start with @task).
-  list         Show all tasks entered so far with their computed dates.
-  help         Display format reference.
-  done         Finish and print the final chart.
-
-The chart is saved to schedule.txt after each task is added, so you can
-preview it in a text editor as you go.
+  Paste your schedule (including <task> tags) into the input area and
+  click Generate. Use the Copy for Teams button to copy the result wrapped
+  in triple backticks, ready to paste into a Teams message.
 
 
 READING THE CHART
@@ -113,25 +116,30 @@ READING THE CHART
 
 COMMON ERRORS
 ────────────────────────────────────────────────────────────────────────────
-  "must provide a start date (start:) or at least one dependency (dep:)"
-      → Every task needs an anchor. Add start: or dep:.
+  "no <task> ... </task> block found"
+      → Add <task> and </task> around your schedule lines.
 
-  "dependency 'X' not found — define dependencies before dependents"
-      → The task numbered X has not been defined yet. Move it earlier in the
-        file (or enter it first in interactive mode).
+  "too few fields"
+      → Every line needs all four fields: task#, name, date or dep, duration.
+
+  "not a valid task number"
+      → Field 1 must be digits and dots only e.g. 1  1.1  2.3.
+
+  "last field must be duration in days"
+      → The last token on the line must be a plain whole number.
+
+  "invalid date — use YYYY-MM-DD"
+      → Dates must be ISO 8601 format. MM/DD/YYYY is not accepted.
+
+  "start date falls on a weekend"
+      → Choose a Monday–Friday date.
+
+  "dependency not found — define dependencies before dependents"
+      → The referenced task hasn't been defined yet. Move it earlier
+        in the <task> block.
 
   "task number already exists"
       → Each task number must be unique. Check for duplicates.
 
-  "dur: must be a positive integer"
-      → Duration must be a whole number of 1 or more.
-
-  "start date falls on a weekend"
-      → start: must be a Monday–Friday date.
-
-  "invalid date — use MM/DD/YYYY"
-      → Check the date format: month/day/four-digit-year.
-
   "circular dependency detected"
-      → Task A depends on B and B depends on A (directly or indirectly).
-        Break the cycle.
+      → Task A depends on B and B depends on A. Break the cycle.

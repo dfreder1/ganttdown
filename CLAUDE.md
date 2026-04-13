@@ -1,37 +1,45 @@
-# txtsched / ganttdown
+# ganttdown
 
-A text-based Gantt chart tool using TSM (Text Schedule Markup) syntax.
-Two modes: interactive (`txtsched.py`) and file-based (`ganttdown.py`).
+A text-based Gantt chart tool. Reads a .gd file containing a <task> block
+and renders a monospaced Gantt chart. Also available as a web app.
 
 ## Language
-Python 3, no external libraries.
+Python 3, no external libraries except Flask for the web app.
 
 ## Key concepts
 - Working days only (Mon-Fri, no weekends)
 - Task numbers use dotted hierarchy (1.1, 1.2, 2.1)
 - Output is monospaced text to screen and schedule.txt
+- schedule.txt is wrapped in triple backticks for Teams pasting
 
-## TSM syntax
-Each task is one line. All fields use `keyword: value` format:
+## Syntax
+Tasks live inside a <task> ... </task> block. Each task is one positional line:
 
-  @task: <num>  name: <name>  start: <MM/DD/YYYY>  dur: <days>  dep: <dep1,dep2>
+  <task#>  <name>  <YYYY-MM-DD or dep#>  <duration>
 
-- `@task:` — line marker and task number (dotted hierarchy)
-- `name:` — task name (required)
-- `start:` — start date MM/DD/YYYY (required unless dep: is given)
-- `dur:` — duration in working days (required)
-- `dep:` — comma-separated dependencies (optional)
+  Field 1 — task number (dotted hierarchy)
+  Field 2 — task name (everything between field 1 and field 3)
+  Field 3 — start date (YYYY-MM-DD) or dependency task number
+  Field 4 — duration in working days
 
 Example:
-@task: 1.0  name: Buy Nails    start: 06/18/2026  dur: 5
-@task: 1.1  name: Buy Wood     start: 06/25/2026  dur: 5
-@task: 1.2  name: Hammer       dur: 5             dep: 1.1
+<task>
+1.0  Project Kickoff  2026-04-13  1
+1.1  Requirements     2026-04-13  5
+1.2  Design           1.1         5
+2.1  Development      1.2         10
+</task>
 
-## File format (ganttdown)
-- One @task: line per task
-- Blank lines and lines starting with // or -- are ignored
-- Dependencies must be defined before the tasks that reference them
+Comments start with //. Blank lines are ignored.
+Everything outside the <task> block is ignored.
+
+## Files
+- ganttdown.py   — CLI tool and core logic (parser, compute, render)
+- app.py         — Flask web app, imports from ganttdown.py
+- templates/     — Jinja2 HTML templates
+- sample.gd      — sample schedule file
 
 ## Conventions
 - Keep all output monospaced
-- Clear error messages on bad input, with line numbers in file mode
+- Clear error messages on bad input with line numbers
+- Dates are ISO 8601 (YYYY-MM-DD) only

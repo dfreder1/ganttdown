@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ganttdown — read a TSM file and render a text-based Gantt chart."""
+"""ganttdown — positional TSM parser with <task> block syntax."""
 
 import re
 import sys
@@ -8,6 +8,11 @@ from datetime import date, datetime, timedelta
 from typing import Optional
 
 OUTPUT_FILE = "schedule.txt"
+
+# Patterns for positional field detection
+RE_TASK_NUM = re.compile(r'^\d+(\.\d+)*$')
+RE_DATE     = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+RE_DURATION = re.compile(r'^\d+$')
 
 
 @dataclass
@@ -54,68 +59,68 @@ def week_monday(d: date) -> date:
     return d - timedelta(days=d.weekday())
 
 
-# ── TSM parser ────────────────────────────────────────────────────────────────
+# ── positional parser ─────────────────────────────────────────────────────────
 
-def parse_task(line: str, tasks: dict) -> Task:
-    line = line.strip()
-    m = re.match(r'^@task:\s+(\S+)\s*(.*)', line)
-    if not m:
-        raise ValueError("line must start with '@task: <number>' then fields")
+def parse_line(line: str, tasks: dict) -> Task:
+    """Parse one positional line into a Task.
 
-    num  = m.group(1)
-    rest = m.group(2)
+    Fixed order:  <task#>  <name...>  <YYYY-MM-DD or dep#>  <duration>
 
-    text   = ' ' + rest
-    kw_re  = re.compile(r'\s(name|start|dur|dep):\s*')
-    hits   = list(kw_re.finditer(text))
+    Examples:
+      1.1  Site Survey      2026-04-13  5
+      1.2  Permits          1.1         5
+    """
+    tokens = line.split()
+    if len(tokens) < 4:
+        raise ValueError(
+            "too few fields — expected: <task#> <name...> <date|dep> <duration>")
 
-    if not hits:
-        raise ValueError(f"@task: {num}: no recognised fields found (expected name:/start:/dur:/dep:)")
-
-    flds: dict = {}
-    for i, h in enumerate(hits):
-        key = h.group(1)
-        vs  = h.end()
-        ve  = hits[i + 1].start() if i + 1 < len(hits) else len(text)
-        flds[key] = text[vs:ve].strip()
-
-    if 'name' not in flds:
-        raise ValueError(f"@task: {num}: task name (name:) is required")
-    name = flds['name']
-    if not name:
-        raise ValueError(f"@task: {num}: task name cannot be empty")
-
-    if 'dur' not in flds:
-        raise ValueError(f"@task: {num}: duration (dur:) is required")
-    try:
-        duration = int(flds['dur'])
-        if duration < 1:
-            raise ValueError()
-    except ValueError:
-        raise ValueError(f"@task: {num}: dur: must be a positive integer, got '{flds['dur']}'")
-
-    start_date: Optional[date] = None
-    if 'start' in flds:
-        try:
-            start_date = datetime.strptime(flds['start'], '%m/%d/%Y').date()
-        except ValueError:
-            raise ValueError(f"@task: {num}: invalid date '{flds['start']}' — use MM/DD/YYYY")
-        if not is_workday(start_date):
-            raise ValueError(f"@task: {num}: start date {flds['start']} falls on a weekend")
-
-    deps: list = []
-    if 'dep' in flds:
-        for d in (x.strip() for x in flds['dep'].split(',') if x.strip()):
-            if d not in tasks:
-                raise ValueError(
-                    f"@task: {num}: dependency '{d}' not found — define dependencies before dependents")
-            deps.append(d)
-
-    if start_date is None and not deps:
-        raise ValueError(f"@task: {num}: must provide a start date (start:) or at least one dependency (dep:)")
+    # Position 1: task number
+    num = tokens[0]
+    if not RE_TASK_NUM.match(num):
+        raise ValueError(f"'{num}' is not a valid task number (e.g. 1  1.1  2.3)")
 
     if num in tasks:
-        raise ValueError(f"@task: {num}: task number already exists")
+        raise ValueError(f"{num}: task number already exists")
+
+    # Position 4 (last token): duration
+    dur_token = tokens[-1]
+    if not RE_DURATION.match(dur_token):
+        raise ValueError(
+            f"{num}: last field must be duration in days, got '{dur_token}'")
+    duration = int(dur_token)
+    if duration < 1:
+        raise ValueError(f"{num}: duration must be at least 1")
+
+    # Position 3 (second to last): date or dependency
+    anchor_token = tokens[-2]
+    start_date = None
+    deps = []
+
+    if RE_DATE.match(anchor_token):
+        try:
+            start_date = datetime.strptime(anchor_token, '%Y-%m-%d').date()
+        except ValueError:
+            raise ValueError(
+                f"{num}: invalid date '{anchor_token}' — use YYYY-MM-DD")
+        if not is_workday(start_date):
+            raise ValueError(
+                f"{num}: start date {anchor_token} falls on a weekend")
+    elif RE_TASK_NUM.match(anchor_token):
+        if anchor_token not in tasks:
+            raise ValueError(
+                f"{num}: dependency '{anchor_token}' not found "
+                f"— define dependencies before dependents")
+        deps = [anchor_token]
+    else:
+        raise ValueError(
+            f"{num}: expected a date (YYYY-MM-DD) or task number, "
+            f"got '{anchor_token}'")
+
+    # Position 2: everything between task number and anchor — the name
+    name = ' '.join(tokens[1:-2]).strip()
+    if not name:
+        raise ValueError(f"{num}: task name cannot be empty")
 
     return Task(number=num, name=name, duration=duration,
                 start_date=start_date, dependencies=deps)
@@ -131,7 +136,7 @@ def compute(tasks: dict) -> None:
         if n in done:
             return
         if n in active:
-            raise ValueError(f"circular dependency detected involving #{n}")
+            raise ValueError(f"circular dependency detected involving {n}")
         active.add(n)
         t = tasks[n]
         for dep in t.dependencies:
@@ -264,13 +269,13 @@ def render(tasks: dict) -> str:
     return '\n'.join(lines) + '\n'
 
 
-# ── file parser ───────────────────────────────────────────────────────────────
+# ── file loader ───────────────────────────────────────────────────────────────
 
 def load_file(path: str) -> dict:
-    """Read a ganttdown file and return a dict of parsed Tasks."""
+    """Read a ganttdown file, extract the <task> block, parse all lines."""
     try:
         with open(path) as f:
-            raw_lines = f.readlines()
+            content = f.read()
     except FileNotFoundError:
         print(f"Error: file not found: {path}", file=sys.stderr)
         sys.exit(1)
@@ -278,18 +283,21 @@ def load_file(path: str) -> dict:
         print(f"Error reading {path}: {e}", file=sys.stderr)
         sys.exit(1)
 
+    m = re.search(r'<task>(.*?)</task>', content, re.DOTALL | re.IGNORECASE)
+    if not m:
+        print("Error: no <task> ... </task> block found in file.", file=sys.stderr)
+        sys.exit(1)
+
+    block = m.group(1)
     tasks: dict = {}
     errors: list = []
 
-    for lineno, raw in enumerate(raw_lines, 1):
+    for lineno, raw in enumerate(block.splitlines(), 1):
         line = raw.strip()
-        if not line or line.startswith('//') or line.startswith('--'):
-            continue   # blank lines and comment lines are ignored
-        if not line.startswith('@task:'):
-            errors.append(f"  line {lineno}: skipped (does not start with '@task'): {line!r}")
+        if not line or line.startswith('//'):
             continue
         try:
-            task = parse_task(line, tasks)
+            task = parse_line(line, tasks)
             tasks[task.number] = task
         except ValueError as e:
             errors.append(f"  line {lineno}: {e}")
@@ -317,7 +325,7 @@ def main() -> None:
     tasks = load_file(path)
 
     if not tasks:
-        print("No tasks found in file.")
+        print("No tasks found in <task> block.")
         sys.exit(0)
 
     try:

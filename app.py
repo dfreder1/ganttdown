@@ -1,29 +1,39 @@
 #!/usr/bin/env python3
 """Flask web interface for ganttdown."""
 
+import re
 from flask import Flask, render_template, request, Response
-from ganttdown import parse_task, compute, render
+from ganttdown import parse_line, compute, render
 
 app = Flask(__name__)
 
 
 def process_input(text: str) -> tuple[str, str]:
-    """Parse TSM input, return (chart, error). One will be empty."""
+    """Extract <task> block from input, parse and render. Returns (chart, error)."""
+    m = re.search(r'<task>(.*?)</task>', text, re.DOTALL | re.IGNORECASE)
+    if not m:
+        return '', 'No <task> ... </task> block found in input.'
+
     tasks: dict = {}
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or line.startswith('//') or line.startswith('--'):
+    errors: list = []
+
+    for lineno, raw in enumerate(m.group(1).splitlines(), 1):
+        line = raw.strip()
+        if not line or line.startswith('//'):
             continue
-        if not line.startswith('@task:'):
-            return '', f'Error: line must start with @task: — got: {line!r}'
         try:
-            task = parse_task(line, tasks)
+            task = parse_line(line, tasks)
             tasks[task.number] = task
             compute(tasks)
         except ValueError as e:
-            return '', f'Error: {e}'
+            errors.append(f"line {lineno}: {e}")
+
+    if errors:
+        return '', '\n'.join(errors)
+
     if not tasks:
-        return '', 'No tasks found in input.'
+        return '', 'No tasks found in <task> block.'
+
     return render(tasks), ''
 
 

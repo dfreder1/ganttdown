@@ -154,12 +154,14 @@
     <div>
       <label for="tsm">Schedule Input</label>
       <textarea id="tsm" name="tsm" spellcheck="false"
-        placeholder="@task: 1    name: Project Kickoff  start: 04/13/2026  dur: 1
-@task: 1.1  name: Requirements     start: 04/13/2026  dur: 5
-@task: 1.2  name: Design           dur: 5             dep: 1.1
-@task: 2.1  name: Development      dur: 10            dep: 1.2
-@task: 2.2  name: Testing          dur: 5             dep: 2.1
-@task: 2.3  name: Deploy           dur: 2             dep: 2.2">{{ tsm_input }}</textarea>
+        placeholder="<task>
+1.0  Project Kickoff  2026-04-13  1
+1.1  Requirements     2026-04-13  5
+1.2  Design           1.1         5
+2.1  Development      1.2         10
+2.2  Testing          2.1         5
+2.3  Deploy           2.2         2
+</task>">{{ tsm_input }}</textarea>
       <div class="btn-row">
         <button type="submit" class="primary">Generate</button>
         <button type="button" onclick="clearAll()">Clear</button>
@@ -187,30 +189,33 @@
 <div class="help-toggle">
   <details>
     <summary>Format Reference</summary>
-    <div class="help-content">Each task is one line. All fields use  keyword: value  format.
+    <div class="help-content">Wrap your schedule in &lt;task&gt; and &lt;/task&gt; tags. Each task is one line:
 
-  @task: &lt;num&gt;  name: &lt;name&gt;  start: &lt;MM/DD/YYYY&gt;  dur: &lt;days&gt;  dep: &lt;dep1,dep2&gt;
+  &lt;task&gt;
+  &lt;task#&gt;  &lt;name&gt;  &lt;YYYY-MM-DD or dep#&gt;  &lt;duration&gt;
+  &lt;/task&gt;
 
-  @task:   line marker and task number — use dotted hierarchy e.g. 1  1.1  2.3
-  name:    task name (required)
-  start:   start date MM/DD/YYYY (required unless dep: is given)
-  dur:     duration in working days Mon–Fri (required)
-  dep:     comma-separated dependencies (optional)
+  Field 1   Task number — dotted hierarchy e.g. 1  1.1  2.3
+  Field 2   Task name — everything between field 1 and field 3
+  Field 3   Start date (YYYY-MM-DD) OR dependency task number
+  Field 4   Duration in working days Mon–Fri
 
 Rules
-  · Keywords can appear in any order after the task number.
-  · Weekends are skipped — duration and chart both count Mon–Fri only.
-  · A dependent task starts the next working day after ALL its deps finish.
-  · When both start: and dep: are given, dep: takes priority.
-  · Tasks sharing the same top-level number (e.g. 1.x) are grouped together.
-  · Blank lines and lines starting with // or -- are ignored.
+  · Dates must be ISO 8601 (YYYY-MM-DD). Weekends are rejected.
+  · A dependent task starts the next working day after its dep finishes.
+  · Dependencies must be defined before the tasks that reference them.
+  · Weekends are skipped in duration and chart display.
+  · Lines beginning with // are comments. Blank lines are ignored.
+  · Everything outside the &lt;task&gt; block is ignored.
 
 Example
-  @task: 1    name: Project Kickoff  start: 04/13/2026  dur: 1
-  @task: 1.1  name: Requirements     start: 04/13/2026  dur: 5
-  @task: 1.2  name: Design           dur: 5             dep: 1.1
-  @task: 2.1  name: Development      dur: 10            dep: 1.2
-  @task: 2.2  name: Testing          dur: 5             dep: 2.1</div>
+  &lt;task&gt;
+  1.0  Project Kickoff  2026-04-13  1
+  1.1  Requirements     2026-04-13  5
+  1.2  Design           1.1         5
+  2.1  Development      1.2         10
+  2.2  Testing          2.1         5
+  &lt;/task&gt;</div>
   </details>
 </div>
 
