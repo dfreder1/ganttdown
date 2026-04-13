@@ -1,0 +1,145 @@
+ganttdown — Administrator Guide
+═══════════════════════════════════════════════════════════════════════════════
+
+OVERVIEW
+────────
+ganttdown is a Flask web app served by Apache2 with mod_wsgi on a
+DigitalOcean VPS. It runs at:
+
+  https://ganttdown.dougfredericks.net
+
+The core logic lives in ganttdown.py. The Flask app in app.py imports
+from it directly. The same ganttdown.py is also usable as a CLI tool.
+
+
+SERVER
+────────────────────────────────────────────────────────────────────────────
+  Host:        <vps-hostname> (DigitalOcean VPS)
+  OS:          Ubuntu
+  User:        <username>
+  Apache user: www-data
+  SSH:         ssh <username>@<vps-hostname>
+
+
+FILE LOCATIONS ON SERVER
+────────────────────────────────────────────────────────────────────────────
+  App files:       /var/www/ganttdown/
+  WSGI entry:      /var/www/ganttdown/ganttdown.wsgi
+  Apache config:   /etc/apache2/sites-available/ganttdown.conf
+  Virtualenv:      /home/<username>/.local/share/virtualenvs/<virtualenv-path>/
+  Error log:       /var/log/apache2/ganttdown_error.log
+  Access log:      /var/log/apache2/ganttdown_access.log
+
+
+GANTTDOWN.WSGI
+────────────────────────────────────────────────────────────────────────────
+This file is NOT in the GitHub repo (it's gitignored) because it contains
+a server-specific virtualenv path. It lives only on the server at
+/var/www/ganttdown/ganttdown.wsgi and looks like this:
+
+  import sys
+  sys.path.insert(0, '/var/www/ganttdown')
+
+  activate_this = '/home/<username>/.local/share/virtualenvs/<virtualenv-path>/bin/activate_this.py'
+
+  with open(activate_this) as file_:
+      exec(file_.read(), dict(__file__=activate_this))
+
+  from app import app as application
+
+To get the correct virtualenv path, run this on the server:
+  cd /var/www/ganttdown && pipenv --venv
+
+If you ever recreate the virtualenv, the path will change and this file
+must be updated to match.
+
+
+APACHE CONFIG
+────────────────────────────────────────────────────────────────────────────
+  /etc/apache2/sites-available/ganttdown.conf
+
+  WSGIDaemonProcess is defined OUTSIDE the VirtualHost block — this is
+  required to avoid a duplicate definition error when Certbot adds the
+  port 443 VirtualHost. Do not move it inside a VirtualHost.
+
+  To edit:
+    sudo vi /etc/apache2/sites-available/ganttdown.conf
+
+  To test config:
+    sudo apache2ctl configtest
+
+  To reload after changes:
+    sudo systemctl reload apache2
+
+
+SSL CERTIFICATE
+────────────────────────────────────────────────────────────────────────────
+  Issued by Let's Encrypt via Certbot.
+  Certbot manages auto-renewal via a systemd timer — no manual action needed.
+
+  To check renewal status:
+    sudo certbot renew --dry-run
+
+  To manually renew:
+    sudo certbot renew
+
+
+VIRTUALENV / DEPENDENCIES
+────────────────────────────────────────────────────────────────────────────
+  Managed with Pipenv. The only dependency is Flask.
+  Pipfile is in the repo. The virtualenv lives in the <username> home dir.
+
+  Key permissions — www-data needs execute access to traverse these dirs:
+    chmod o+x /home/<username>/.local
+    chmod o+x /home/<username>/.local/share
+    chmod o+x /home/<username>/.local/share/virtualenvs
+    chmod o+x /home/<username>/.local/share/virtualenvs/<virtualenv-path>
+
+  If you recreate the virtualenv these must be reapplied.
+
+  To reinstall dependencies:
+    cd /var/www/ganttdown
+    pipenv install
+
+
+DEPLOYING UPDATES
+────────────────────────────────────────────────────────────────────────────
+  Standard deploy (code changes only):
+    cd /var/www/ganttdown && git pull && sudo systemctl reload apache2
+
+  If you add a new Python dependency:
+    cd /var/www/ganttdown && git pull
+    pipenv install
+    sudo systemctl reload apache2
+
+
+GITHUB REPO
+────────────────────────────────────────────────────────────────────────────
+  https://github.com/dfreder1/ganttdown
+
+  The following files are gitignored and exist only on the server:
+    ganttdown.wsgi   (server-specific virtualenv path)
+    schedule.txt     (generated output)
+
+
+TROUBLESHOOTING
+────────────────────────────────────────────────────────────────────────────
+  Site shows 500 Internal Server Error
+    → sudo tail -30 /var/log/apache2/ganttdown_error.log
+
+  Permission denied on activate_this.py
+    → Re-apply the chmod o+x commands listed under VIRTUALENV above.
+
+  Apache won't reload after config change
+    → sudo apache2ctl configtest
+    → Look for syntax errors, especially duplicate WSGIDaemonProcess.
+
+  DNS not resolving
+    → Check A record for ganttdown.dougfredericks.net in DigitalOcean
+      Networking → Domains → dougfredericks.net
+    → dig ganttdown.dougfredericks.net +short
+
+  Virtualenv path changed (e.g. after pipenv reinstall)
+    → cd /var/www/ganttdown && pipenv --venv  (get new path)
+    → Update /var/www/ganttdown/ganttdown.wsgi with new path
+    → sudo systemctl reload apache2
