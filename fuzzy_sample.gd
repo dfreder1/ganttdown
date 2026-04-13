@@ -13,6 +13,10 @@ outside the task block.
 2.1  Excavation         1.2         5
 2.2  Build foundation   2.1         5
 2.3  Cure foundation    2.2         7
+
+// Phase 3 - final things
+0.1 Sign 2 forms 2.2 6
+3 owner approval 2.3 7
 </task>
 
 More narrative text here, also ignored.
