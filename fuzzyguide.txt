@@ -1,0 +1,133 @@
+fuzzydown — User Guide
+═══════════════════════════════════════════════════════════════════════════════
+
+OVERVIEW
+────────
+fuzzydown is a relaxed, positional alternative to ganttdown. Instead of
+explicit keyword: value pairs, tasks are written as plain lines with fields
+in a fixed order. The parser figures out what is what by the shape of each
+field.
+
+Schedule lines live inside a <task> block, which can be embedded anywhere
+in a plain text or markdown file. Everything outside the block is ignored.
+
+
+THE <TASK> BLOCK
+────────────────────────────────────────────────────────────────────────────
+Wrap your schedule in <task> and </task> tags:
+
+  <task>
+  1.0  Project Kickoff  2026-04-13  1
+  1.1  Requirements     2026-04-13  5
+  1.2  Design           1.1         5
+  </task>
+
+  • Only one <task> block per file.
+  • Everything outside the block is ignored — narrative text, headings,
+    notes, etc.
+  • Blank lines inside the block are ignored.
+  • Lines beginning with // are comments and are ignored.
+
+
+POSITIONAL SYNTAX
+────────────────────────────────────────────────────────────────────────────
+Each task is one line with four positional fields in this fixed order:
+
+  <task#>  <name>  <2026-MM-DD or dep#>  <duration>
+
+  Field 1   Task number — dotted hierarchy e.g. 1  1.1  2.3
+  Field 2   Task name — everything between the task number and field 3
+  Field 3   Start date (YYYY-MM-DD) OR dependency task number
+  Field 4   Duration in working days Mon–Fri
+
+Rules
+  • Fields 1, 3, and 4 are detected by their shape:
+      Task number  →  digits and dots         e.g.  1.2
+      Date         →  YYYY-MM-DD              e.g.  2026-04-13
+      Duration     →  plain integer           e.g.  5
+  • Field 2 (name) is everything left between field 1 and field 3.
+  • Dates must be ISO 8601 format (YYYY-MM-DD). Other formats are rejected.
+  • Dates must fall on a working day (Mon–Fri).
+  • A task with a dependency starts the next working day after that
+    dependency finishes.
+  • Tasks sharing the same top-level number (e.g. 1.x) are grouped together
+    in the chart with a blank line between groups.
+  • Dependencies must be defined before the tasks that reference them.
+  • Weekends are skipped in both duration and chart display.
+
+Examples
+  1.0  Project Kickoff    2026-04-13  1
+  1.1  Requirements       2026-04-13  5
+  1.2  Design             1.1         5
+  2.1  Development        1.2         10
+  2.2  Testing            2.1         5
+  2.3  Deploy             2.2         2
+
+
+RUNNING
+────────────────────────────────────────────────────────────────────────────
+  python3 fuzzydown.py <your-file>
+
+  Example:
+    python3 fuzzydown.py myproject.gd
+
+Output
+  The Gantt chart is printed to the terminal and saved to schedule.txt
+  wrapped in triple backticks for pasting into Microsoft Teams or other
+  markdown-aware tools.
+
+
+EMBEDDING IN A MARKDOWN FILE
+────────────────────────────────────────────────────────────────────────────
+The <task> block can sit inside a markdown document naturally:
+
+  ## Q2 Construction Schedule
+
+  The following schedule covers site prep through foundation work.
+
+  <task>
+  // Phase 1 - Site prep
+  1.1  Site Survey      2026-04-13  5
+  1.2  Permits          1.1         5
+
+  // Phase 2 - Foundation
+  2.1  Excavation       1.2         5
+  2.2  Build foundation 2.1         5
+  2.3  Cure foundation  2.2         7
+  </task>
+
+  See the project manager for questions.
+
+Unknown HTML tags like <task> pass through most markdown renderers as
+literal text, so the document remains readable even without processing.
+
+
+COMMON ERRORS
+────────────────────────────────────────────────────────────────────────────
+  "no <task> ... </task> block found"
+      → Add <task> and </task> around your schedule lines.
+
+  "too few fields"
+      → Every line needs all four fields: task#, name, date or dep, duration.
+
+  "not a valid task number"
+      → Field 1 must be digits and dots only e.g. 1  1.1  2.3.
+
+  "last field must be duration in days"
+      → The last token on the line must be a plain whole number.
+
+  "invalid date — use YYYY-MM-DD"
+      → Dates must be ISO 8601 format. MM/DD/YYYY is not accepted.
+
+  "start date falls on a weekend"
+      → Choose a Monday–Friday date.
+
+  "dependency not found — define dependencies before dependents"
+      → The referenced task number hasn't been defined yet. Move it earlier
+        in the <task> block.
+
+  "task number already exists"
+      → Each task number must be unique. Check for duplicates.
+
+  "circular dependency detected"
+      → Task A depends on B and B depends on A. Break the cycle.
